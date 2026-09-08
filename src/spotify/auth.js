@@ -14,6 +14,16 @@ const SCOPES = [
   "user-modify-playback-state",
 ].join(" ");
 
+const FIXED_PLAYLIST_ID = "7oJLSXWbe1XhpCvfd5yP58";
+
+export function getDefaultPlaylistId() {
+  return FIXED_PLAYLIST_ID;
+}
+
+export function setDefaultPlaylistId(playlistId) {
+  return;
+}
+
 function generateRandomString(length) {
   const characters =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -169,10 +179,77 @@ export async function exchangeCodeForToken(
   return data.access_token;
 }
 
+export async function refreshAccessToken() {
+  const refreshToken = localStorage.getItem("spotify_refresh_token");
+
+  if (!refreshToken) {
+    return null;
+  }
+
+  const body = new URLSearchParams({
+    client_id: CLIENT_ID,
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+  });
+
+  const response = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body,
+  });
+
+  if (!response.ok) {
+    console.error("Spotify refresh failed:", await response.text());
+    logout();
+    return null;
+  }
+
+  const data = await response.json();
+
+  if (data.access_token) {
+    localStorage.setItem("spotify_access_token", data.access_token);
+  }
+
+  if (data.refresh_token) {
+    localStorage.setItem("spotify_refresh_token", data.refresh_token);
+  }
+
+  if (data.expires_in) {
+    localStorage.setItem(
+      "spotify_expires_at",
+      String(Date.now() + Number(data.expires_in) * 1000)
+    );
+  }
+
+  return data.access_token || null;
+}
+
+export async function getValidAccessToken() {
+  const token = localStorage.getItem("spotify_access_token");
+  const expiresAt = Number(localStorage.getItem("spotify_expires_at") || 0);
+
+  if (token && Date.now() < expiresAt - 60000) {
+    return token;
+  }
+
+  return refreshAccessToken();
+}
+
 export function getAccessToken() {
-  return localStorage.getItem(
-    "spotify_access_token"
-  );
+  const token = localStorage.getItem("spotify_access_token");
+  const expiresAt = Number(localStorage.getItem("spotify_expires_at") || 0);
+
+  if (!token) {
+    return null;
+  }
+
+  if (expiresAt && Date.now() >= expiresAt - 60000) {
+    return null;
+  }
+
+  return token;
 }
 
 export function logout() {

@@ -1,10 +1,10 @@
-import { getAccessToken } from "./auth";
+import { getValidAccessToken } from "./auth";
 
 const API_BASE =
   "https://api.spotify.com/v1";
 
 async function spotifyFetch(endpoint) {
-  const token = getAccessToken();
+  const token = await getValidAccessToken();
 
   if (!token) {
     throw new Error(
@@ -56,7 +56,7 @@ export async function transferPlayback(
   deviceId
 ) {
   const token =
-    getAccessToken();
+    await getValidAccessToken();
 
   const response = await fetch(
     `${API_BASE}/me/player`,
@@ -94,7 +94,7 @@ export async function playTrack(
   deviceId
 ) {
   const token =
-    getAccessToken();
+    await getValidAccessToken();
 
   if (!deviceId) {
     throw new Error(

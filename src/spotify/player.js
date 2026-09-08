@@ -39,7 +39,7 @@ export async function createPlayer({
     onError,
 }) {
     await loadSpotifySDK();
-    const token = getAccessToken;
+    const token = getAccessToken();
     if (!token) {
         throw new Error(
             "no access token"

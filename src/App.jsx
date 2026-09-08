@@ -11,6 +11,8 @@ import {
   login,
   exchangeCodeForToken,
   getAccessToken,
+  getDefaultPlaylistId,
+  setDefaultPlaylistId,
   logout,
 } from "./spotify/auth";
 import {
@@ -34,6 +36,7 @@ function App() {
   const [currentTrack, setCurrentTrack] = useState(null);
   const [currentTrackIndex, setCurrentTrackIndex] = useState(-1);
   const [isPlaying, setIsPlaying] = useState(false);
+  const fixedPlaylistId = getDefaultPlaylistId();
 
   useEffect(() => {
     async function initialize() {
@@ -51,7 +54,40 @@ function App() {
           console.log("authenticated");
         }
 
-        const token = getAccessToken();
+        let token = getAccessToken();
+        if (!token) {
+          const refreshToken = localStorage.getItem("spotify_refresh_token");
+          if (refreshToken) {
+            const refreshed = await fetch("https://accounts.spotify.com/api/token", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+              },
+              body: new URLSearchParams({
+                client_id: import.meta.env.VITE_SPOTIFY_CLIENT_ID,
+                grant_type: "refresh_token",
+                refresh_token: refreshToken,
+              }),
+            });
+
+            if (refreshed.ok) {
+              const data = await refreshed.json();
+              localStorage.setItem("spotify_access_token", data.access_token);
+              if (data.refresh_token) {
+                localStorage.setItem("spotify_refresh_token", data.refresh_token);
+              }
+              if (data.expires_in) {
+                localStorage.setItem(
+                  "spotify_expires_at",
+                  String(Date.now() + Number(data.expires_in) * 1000)
+                );
+              }
+              token = data.access_token;
+            } else {
+              logout();
+            }
+          }
+        }
 
         if (!token) {
           setLoggedIn(false);
@@ -66,7 +102,15 @@ function App() {
 
         const playlistData = await getPlaylists();
         console.log("playlists:", playlistData);
-        setPlaylists(playlistData.items ?? []);
+        const playlistItems = playlistData.items ?? [];
+        setPlaylists(playlistItems);
+
+        if (fixedPlaylistId) {
+          const defaultPlaylist = playlistItems.find((playlist) => playlist.id === fixedPlaylistId);
+          if (defaultPlaylist) {
+            await openPlaylist(defaultPlaylist);
+          }
+        }
  
       } catch (error) {
         console.error("Initialization error:", error);
@@ -137,6 +181,7 @@ function App() {
 
   async function openPlaylist(playlist) {
     setSelectedPlaylist(playlist);
+    setDefaultPlaylistId(playlist?.id ?? null);
     try {
       const data = await getPlaylistItems(playlist.id);
       setTracks(data.items ?? []);
@@ -270,27 +315,31 @@ function App() {
         </button>
       </div>
 
-      <h2>playlists:</h2>
-      <div className="playlists">
-        {playlists.map((playlist) => (
-            <div
-              key={playlist.id}
-              className="playlist"
-              onClick={() => openPlaylist(playlist)}
-            >
+      {!fixedPlaylistId && (
+        <>
+          <h2>playlists:</h2>
+          <div className="playlists">
+            {playlists.map((playlist) => (
+                <div
+                  key={playlist.id}
+                  className="playlist"
+                  onClick={() => openPlaylist(playlist)}
+                >
 
-              {playlist.images?.[0]?.url && (
-                <img src={playlist.images[0].url}
-                  alt=""
-                  width="150"
-                />
-              )}
+                  {playlist.images?.[0]?.url && (
+                    <img src={playlist.images[0].url}
+                      alt=""
+                      width="150"
+                    />
+                  )}
 
-              <h3>{playlist.name}</h3>
-            </div>
-          )
-        )}
-      </div>
+                  <h3>{playlist.name}</h3>
+                </div>
+              )
+            )}
+          </div>
+        </>
+      )}
 
       {selectedPlaylist && (
         <div className="track-list">
